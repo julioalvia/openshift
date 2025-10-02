@@ -5,6 +5,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -13,9 +14,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import YAML from "yaml";
 import JsonView from "@uiw/react-json-view";
-import { Button } from '@/components/animate-ui/components/buttons/button';
+import { Button } from "@/components/animate-ui/components/buttons/button";
 import { Loader2 } from "lucide-react";
-
+import { BorderBeam } from "@/components/ui/border-beam";
 
 const SAMPLE_YAML = `apiVersion: apps.openshift.io/v1
 kind: DeploymentConfig
@@ -142,12 +143,12 @@ function App() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-6 space-y-6">
+    <div className="mx-auto max-w-6xl p-6 space-y-6 flex justify-center items-center">
       {/** Estado para badge de resultado */}
       {(() => {
-        return null
+        return null;
       })()}
-      <Card>
+      <Card className="relative w-[1024px] overflow-hidden">
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1.5">
@@ -220,7 +221,8 @@ function App() {
                     badgeClass = "bg-blue-100 text-blue-800 border-transparent";
                   } else if (isOk) {
                     badgeText = "Conversión lista";
-                    badgeClass = "bg-green-100 text-green-800 border-transparent";
+                    badgeClass =
+                      "bg-green-100 text-green-800 border-transparent";
                   }
                   return <Badge className={badgeClass}>{badgeText}</Badge>;
                 })()}
@@ -260,6 +262,12 @@ function App() {
             Endpoint: {endpoint}
           </div>
         </CardContent>
+        <CardFooter />
+        <BorderBeam
+          duration={8}
+          size={100}
+          className="from-transparent via-green-500 to-transparent"
+        />
       </Card>
     </div>
   );
