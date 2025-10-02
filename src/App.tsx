@@ -12,8 +12,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import YAML from "yaml";
-import JsonView from "@uiw/react-json-view";
+ 
 import { Button } from "@/components/animate-ui/components/buttons/button";
 import { Loader2 } from "lucide-react";
 import { BorderBeam } from "@/components/ui/border-beam";
@@ -58,64 +57,48 @@ spec:
 
 function App() {
   const [yamlText, setYamlText] = useState(SAMPLE_YAML);
-  const [resultJson, setResultJson] = useState<
-    Record<string, unknown> | unknown[] | null
-  >(null);
+  const [resultYaml, setResultYaml] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const endpoint = useMemo(() => {
-    const envUrl = import.meta.env.VITE_N8N_WEBHOOK_URL as string | undefined;
-    if (import.meta.env.DEV) {
-      // En dev usar proxy si no hay env definida
-      return envUrl && envUrl.length > 0 ? envUrl : "/api/convert";
-    }
-    // En producción requiere estar definida
-    return envUrl || "/api/convert";
+    const envUrl =
+      (import.meta.env.VITE_CONVERT_URL as string | undefined) ||
+      (import.meta.env.VITE_N8N_WEBHOOK_URL as string | undefined);
+    return envUrl && envUrl.length > 0
+      ? envUrl
+      : "http://localhost:8000/convert";
   }, []);
 
   async function handleConvert() {
     setLoading(true);
     setError(null);
-    setResultJson(null);
+    setResultYaml(null);
     try {
       const resp = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ DeploymentConfig: yamlText }),
+        body: JSON.stringify({ yaml_content: yamlText }),
       });
 
       if (!resp.ok) {
         const text = await resp.text().catch(() => "");
         throw new Error(text || `Error HTTP ${resp.status}`);
       }
-      // La API puede devolver JSON, string JSON o YAML.
-      let parsed: unknown;
       const contentType = resp.headers.get("content-type") || "";
       if (contentType.includes("application/json")) {
-        parsed = await resp.json();
-        console.log("parsed 1", parsed);
+        const data = await resp.json();
+        const yamlOut =
+          typeof data?.yaml_output === "string"
+            ? data.yaml_output
+            : JSON.stringify(data, null, 2);
+        setResultYaml(yamlOut);
       } else {
         const textBody = await resp.text();
-        try {
-          parsed = JSON.parse(textBody);
-          console.log("parsed", parsed);
-        } catch {
-          try {
-            parsed = YAML.parse(textBody);
-            console.log("parsed", parsed);
-          } catch {
-            parsed = { raw: textBody };
-          }
-          console.log("parsed", parsed);
-        }
+        setResultYaml(textBody);
       }
-      // Algunas veces el flujo de n8n envuelve el objeto en { data: ... }
-      // o retorna una cadena JSON dentro de una propiedad.
-      const normalized = normalizeOutput(parsed);
-      setResultJson(normalized);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Error desconocido";
       setError(message);
@@ -126,20 +109,19 @@ function App() {
 
   function handleClear() {
     setYamlText("");
-    setResultJson(null);
+    setResultYaml(null);
     setError(null);
   }
 
   function handleLoadSample() {
     setYamlText(SAMPLE_YAML);
-    setResultJson(null);
+    setResultYaml(null);
     setError(null);
   }
 
   function handleCopyOutput() {
-    if (!resultJson) return;
-    const pretty = JSON.stringify(resultJson, null, 2);
-    navigator.clipboard.writeText(pretty).catch(() => {});
+    if (!resultYaml) return;
+    navigator.clipboard.writeText(resultYaml).catch(() => {});
   }
 
   return (
@@ -208,12 +190,12 @@ function App() {
             </div>
 
             <div className="space-y-2">
-              <Label>Resultado (JSON)</Label>
+              <Label>Resultado (YAML)</Label>
 
               <div className="flex items-center gap-2">
                 {(() => {
                   const isLoading = loading;
-                  const isOk = !loading && !!resultJson;
+                  const isOk = !loading && !!resultYaml;
                   let badgeText = "Sin datos";
                   let badgeClass = "bg-red-100 text-red-800 border-transparent";
                   if (isLoading) {
@@ -229,23 +211,20 @@ function App() {
                 <Button
                   variant="outline"
                   onClick={handleCopyOutput}
-                  disabled={!resultJson || loading}
+                  disabled={!resultYaml || loading}
                 >
                   Copiar
                 </Button>
               </div>
               <div className="border rounded-md p-2 bg-card">
                 <ScrollArea className="h-195">
-                  {resultJson ? (
-                    <div className="text-left">
-                      <JsonView
-                        value={resultJson as any}
-                        collapsed={false}
-                        enableClipboard={false}
-                        displayDataTypes={false}
-                        displayObjectSize={false}
-                      />
-                    </div>
+                  {resultYaml ? (
+                    <Textarea
+                      id="yaml-output"
+                      value={resultYaml}
+                      readOnly
+                      className="font-mono text-sm min-h-180"
+                    />
                   ) : (
                     <div className="text-muted-foreground text-sm">
                       — Esperando conversión —
@@ -275,44 +254,3 @@ function App() {
 
 export default App;
 
-// Normaliza diferentes formas de respuesta de n8n/webhook hacia un objeto/array JSON limpio
-function normalizeOutput(input: unknown): Record<string, unknown> | unknown[] {
-  // Si ya es objeto o array, intentamos detectar propiedades comunes
-  if (Array.isArray(input)) return input;
-  if (input && typeof input === "object") {
-    const obj = input as Record<string, unknown>;
-    // Desenrollar { data: ... }
-    if (
-      obj.data &&
-      (typeof obj.data === "object" || typeof obj.data === "string")
-    ) {
-      const inner = tryParseUnknown(obj.data);
-      return normalizeOutput(inner);
-    }
-    // Desenrollar { output: ... } o { result: ... }
-    for (const key of ["output", "result", "payload"]) {
-      if (obj[key] !== undefined) {
-        return normalizeOutput(tryParseUnknown(obj[key]));
-      }
-    }
-    return obj;
-  }
-  // Intentar parsear string JSON/YAML
-  return tryParseUnknown(input);
-}
-
-function tryParseUnknown(value: unknown): Record<string, unknown> | unknown[] {
-  if (typeof value === "string") {
-    const text = value.trim();
-    try {
-      return JSON.parse(text);
-    } catch {}
-    try {
-      return YAML.parse(text);
-    } catch {}
-    return [{ raw: text }];
-  }
-  if (value && typeof value === "object")
-    return value as Record<string, unknown>;
-  return [{ value }];
-}
