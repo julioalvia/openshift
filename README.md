@@ -73,3 +73,12 @@ export default defineConfig([
   },
 ])
 ```
+
+## Variables de entorno
+
+Crea un archivo `.env` basado en `.env.example` con la URL del webhook de n8n. En desarrollo puedes omitirla para usar el proxy `/api/convert` configurado en `vite.config.ts`.
+
+```env
+# URL del webhook de n8n para producción/preview
+VITE_N8N_WEBHOOK_URL=
+```

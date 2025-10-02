@@ -1,0 +1,18 @@
+version: "3.9"
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Pasa la URL del webhook a Vite en tiempo de build
+        VITE_N8N_WEBHOOK_URL: ${VITE_N8N_WEBHOOK_URL}
+    image: openshift-migrador:latest
+    ports:
+      - "5174:80"
+    environment:
+      # Si también quieres tenerla en runtime para otros usos
+      - VITE_N8N_WEBHOOK_URL=${VITE_N8N_WEBHOOK_URL}
+    restart: unless-stopped
+
+
