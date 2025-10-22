@@ -1,0 +1,268 @@
+---
+description: Este archivo define la estructura de carpetas del proyecto y establece reglas sobre dónde debe ubicarse cada tipo de archivo o componente.
+alwaysApply: true
+---
+# Estructura de Carpetas del Proyecto
+
+<rule>
+Este documento establece la estructura de carpetas estándar para el proyecto y define dónde debe colocarse cada tipo de archivo. El objetivo es mantener una organización consistente y evitar duplicación de código.
+
+## Estructura General
+
+```
+{project-name}/
+├── public/                             # Archivos estáticos públicos
+├── src/                                # Código fuente principal
+│   ├── core/                           # Núcleo de la aplicación (lógica de negocio)
+│   │   ├── application/                # Servicios y lógica de aplicación
+│   │   │   ├── interfaces/             # Interfaces de servicios
+│   │   │   └── services/               # Implementación de servicios
+│   │   ├── domain/                     # Entidades y reglas de negocio
+│   │   │   └── entities/               # Entidades de dominio
+│   │   └── infrastructure/             # Implementaciones concretas para servicios externos
+│   │       └── repositories/           # Implementaciones de repositorios
+│   ├── frameworks/                     # Integraciones con frameworks externos
+│   ├── presentation/                   # Capa de presentación organizada por modulos funcionales
+│   │   ├── {modulo_funcional}/         # Modulo funcional del sistema
+|   │   │   ├── components/             # Componentes locales del modulo
+│   |   │   ├── hooks/                  # Hooks locales del modulo
+│   |   │   └── {modulo_funcional}.tsx  # Hooks personalizados
+│   │   └── styles/                     # Estilos globales
+│   ├── shared/                         # Componentes globales del sistema
+│   │   ├── components/                 # Componentes globales reutilizables
+│   │   └── hooks/                      # Hooks personalizados
+│   ├── routing/                        # Configuración de rutas
+│   ├── store/                          # Estado global (Zustand)
+│   │   ├── {DomainName}/               # Carpetas por dominio funcional
+│   │   │   ├── {domainName}.store.ts   # Implementación del store
+│   │   │   └── {domainName}.type.ts    # Tipos e interfaces del store
+│   ├── utils/                          # Utilidades y funciones auxiliares
+│   └── index.tsx                       # Punto de entrada de la aplicación
+└── server/                             # Código del servidor
+```
+
+## Reglas de Organización
+
+### 1. Componentes
+
+- **Componentes Globales**: SIEMPRE en `/src/shared/components/`
+  - Cada componente en su propia carpeta con su nombre
+  - Incluir archivo principal, estilos y tipos asociados
+
+- **Componentes de Página/Pantalla**: En `/src/presentation/{modulo_funcional}/`
+  - Organizados por módulo funcional
+  - Componentes específicos de una pantalla van dentro de su respectivo directorio
+
+### 2. Lógica de Negocio
+
+- **Servicios**: SIEMPRE en `/src/core/application/services/`
+  - Organizados por dominio funcional
+  - Interfaces en `/src/core/application/interfaces/`
+
+- **Entidades**: SIEMPRE en `/src/core/domain/entities/`
+  - Organizados por dominio funcional
+  - Usar interfaces TypeScript para definir estructuras
+
+- **Infraestructura**: SIEMPRE en `/src/core/infrastructure/`
+  - Implementaciones concretas de repositorios en `/src/core/infrastructure/repositories/`
+
+### 3. Estado Global
+
+- **Stores**: SIEMPRE en `/src/store/`
+  - Organizados por dominio funcional en carpetas: `/src/store/{DomainName}/`
+  - Cada dominio debe tener:
+    - `{domainName}.store.ts`: Implementación del store con Zustand
+    - `{domainName}.type.ts`: Tipos e interfaces del store
+  - Seguir convenciones de Zustand
+
+### 4. Utilidades
+
+- **Funciones auxiliares**: SIEMPRE en `/src/utils/`
+  - Organizadas por categoría funcional
+  - Funciones pequeñas y de propósito único
+
+### 5. Hooks
+
+- **Hooks globales**: En `/src/shared/hooks/`
+  - Un archivo por hook o grupo relacionado de hooks
+
+- **Hooks específicos de pantalla**: En el directorio de la pantalla correspondiente bajo un subdirectorio `hooks/`
+
+## Convenciones de Nomenclatura
+
+1. **Directorios**:
+   - Usar kebab-case para nombres de directorios de componentes: `fecha-picker/` en lugar de `FechaPicker/`
+   - Usar PascalCase para nombres de directorios de stores: `Product/` en lugar de `product/`
+
+2. **Archivos**:
+   - **Componentes React**: PascalCase, `.tsx`: `Button.tsx`
+   - **Hooks**: camelCase, prefijo `use`, `.ts`: `useAuth.ts`
+   - **Servicios**: PascalCase con sufijo `Service`, `.ts`: `AppointmentService.ts`
+   - **Stores**: camelCase, sufijo `store`, `.ts`: `product.store.ts`
+   - **Tipos de Store**: camelCase, sufijo `type`, `.ts`: `product.type.ts`
+   - **Utilidades**: camelCase, `.ts`: `formatDate.ts`
+   - **Estilos**: Mismo nombre que el componente, `.module.css`: `Button.module.css`
+
+## Reglas para Agregar Código Nuevo
+
+1. **Componentes Nuevos**:
+   - PRIMERO verificar si ya existe un componente similar en `/src/shared/components/`
+   - Si es un componente global reutilizable: agregarlo a `/src/shared/components/`
+   - Si es específico de una pantalla: agregarlo al directorio de esa pantalla
+
+2. **Nuevas Pantallas/Páginas**:
+   - Crear en `/src/presentation/{modulo_funcional}/` bajo el módulo adecuado
+   - Seguir la estructura existente de carpetas para ese módulo
+
+3. **Nuevos Servicios**:
+   - Agregar a `/src/core/application/services/` bajo el dominio correspondiente
+   - Definir interfaz en `/src/core/application/interfaces/`
+   - Seguir el patrón de servicios existentes
+
+4. **Nuevas Entidades**:
+   - Agregar a `/src/core/domain/entities/` bajo el dominio correspondiente
+
+5. **Nuevos Adaptadores de Infraestructura**:
+   - Implementaciones de repositorios en `/src/core/infrastructure/repositories/`
+   - Declaraciones de API en `/src/core/infrastructure/apisDeclaration/`
+   - Seguir el patrón de interfaces definido en `/src/core/application/interfaces/`
+
+6. **Nuevos Stores**:
+   - Crear una carpeta en `/src/store/` con el nombre del dominio (PascalCase)
+   - Crear dos archivos:
+     - `{domainName}.type.ts`: Para tipos e interfaces del store
+     - `{domainName}.store.ts`: Para la implementación del store con Zustand
+   - Seguir el patrón de los stores existentes
+
+## Ejemplos
+
+### Estructura de Store
+
+```
+src/store/
+├── Product/
+│   ├── product.type.ts    # Interfaces y tipos del store
+│   └── product.store.ts   # Implementación del store
+├── User/
+│   ├── user.type.ts
+│   └── user.store.ts
+└── Appointment/
+    ├── appointment.type.ts
+    └── appointment.store.ts
+```
+
+### Ejemplo de Archivo de Tipos (product.type.ts)
+
+```typescript
+// src/store/Product/product.type.ts
+import { IOptions } from "core/domain/entities/components/components";
+
+export interface Product {
+  id: string;
+  name: string;
+  description: string;
+  // ...otras propiedades
+}
+
+export type UpdateProductInput = Partial<
+  Omit<Product, "category" | "supplier">
+> & {
+  // Propiedades específicas
+};
+
+export interface ProductStoreProps {
+  product: Product | null;
+  actions: {
+    clearProduct: () => void;
+    findOne: ({ id }: { id: string }) => Promise<void>;
+    updateProduct: (update: UpdateProductInput) => void;
+    saveProduct: () => Promise<{ id: string; sku: string }>;
+    // ...otras acciones
+  };
+}
+```
+
+### Ejemplo de Implementación de Store (product.store.ts)
+
+```typescript
+// src/store/Product/product.store.ts
+import { create } from "zustand";
+import { Product, ProductStoreProps, UpdateProductInput } from "./product.type";
+
+const initialProduct: Product = {
+  id: "",
+  name: "",
+  // ...otras propiedades iniciales
+};
+
+const useProductStore = create<ProductStoreProps>((set, get) => ({
+  product: null,
+  actions: {
+    clearProduct: () => set({ product: null }),
+    findOne: async ({ id }) => {
+      // Implementación
+    },
+    updateProduct: (update: UpdateProductInput) => {
+      // Implementación
+    },
+    saveProduct: async () => {
+      // Implementación
+    },
+    // ...otras acciones
+  }
+}));
+
+export const useProductInfo = () =>
+  useProductStore((state) => state.product);
+
+export const useProductActions = () =>
+  useProductStore((state) => state.actions);
+
+export default useProductStore;
+```
+
+### Agregar un Nuevo Componente Global
+
+```typescript
+// En /src/presentation/components/DateSelector/DateSelector.tsx
+import React from 'react';
+import styles from './DateSelector.module.css';
+
+interface DateSelectorProps {
+  value: Date;
+  onChange: (date: Date) => void;
+}
+
+export const DateSelector: React.FC<DateSelectorProps> = ({ value, onChange }) => {
+  // Implementación
+};
+
+export default DateSelector;
+```
+
+### Agregar una Nueva Pantalla
+
+```typescript
+// En /src/presentation/{modulo_funcional}/Reports/ReportDashboard.tsx
+import React from 'react';
+import { useReportData } from './hooks/useReportData';
+
+export function ReportDashboard() {
+  // Implementación
+}
+```
+
+## Ejemplos de Ubicaciones Incorrectas (EVITAR)
+
+- ❌ Crear componentes generales dentro de `/src/presentation/{modulo_funcional}/`
+- ❌ Definir servicios dentro de componentes de UI
+- ❌ Colocar lógica de negocio en componentes
+- ❌ Duplicar componentes existentes con nombres diferentes
+- ❌ Crear archivos de utilidades en carpetas de componentes
+- ❌ Colocar hooks específicos de un módulo en la carpeta de hooks globales
+- ❌ Implementar acceso directo a APIs externas en servicios de aplicación (usar apisDeclaration)
+- ❌ Mezclar implementaciones de repositorio con interfaces en la misma carpeta
+- ❌ Usar axios directamente en repositorios en lugar de usar las declaraciones de API
+- ❌ Crear stores sin separar tipos e implementación en archivos separados
+- ❌ No seguir la estructura de carpetas por dominio para los stores
+</rule>

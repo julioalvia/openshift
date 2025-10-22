@@ -25,9 +25,13 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"],
+      "core/*": ["./src/core/*"],
+      "presentation/*": ["./src/presentation/*"],
+      "shared/*": ["./src/shared/*"],
+      "utils/*": ["./src/utils/*"],
+      "store/*": ["./src/store/*"],
+      "routing/*": ["./src/routing/*"]
     }
   },
   "include": ["src"]

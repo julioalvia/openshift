@@ -1,0 +1,251 @@
+---
+description: Reglas para generar estructura del Core desde OpenAPI/cURL
+alwaysApply: false
+---
+# Reglas para generar estructura del Core desde OpenAPI/cURL
+
+## Índice
+1. [Introducción](#introducción)
+2. [Proceso general](#proceso-general)
+3. [Transformación desde OpenAPI](#transformación-desde-openapi)
+4. [Transformación desde cURL](#transformación-desde-curl)
+5. [Reglas de generación por componente](#reglas-de-generación-por-componente)
+6. [Ejemplos](#ejemplos)
+
+## Introducción
+
+Este documento describe las reglas para generar automáticamente la estructura del Core Frontend a partir de especificaciones OpenAPI o comandos cURL. Siguiendo estas reglas, se puede crear de forma consistente los componentes necesarios para mantener la arquitectura limpia.
+
+## Proceso general
+
+1. **Análisis de la fuente**: Extraer información relevante del OpenAPI o cURL
+2. **Definición de entidades**: Crear modelos de dominio
+3. **Generación de interfaces**: Definir contratos para repositorios
+4. **Implementación de repositorios**: Crear acceso a datos
+5. **Casos de uso**: Implementar lógica de negocio
+6. **Servicios de aplicación**: Conectar casos de uso con presentación
+
+## Transformación desde OpenAPI
+
+### Preparación del archivo OpenAPI
+
+1. Obtener el archivo de especificación OpenAPI (YAML o JSON)
+2. Validar que contenga:
+   - Definiciones de esquemas (schemas/components)
+   - Endpoints documentados
+   - Respuestas y códigos de estado
+
+### Reglas de transformación
+
+Para cada endpoint en la especificación:
+
+1. **Identificar el recurso principal**:
+   - Extraer del path (ej: `/agencies` → recurso `Agency`)
+   - Determinar operaciones CRUD disponibles
+
+2. **Analizar schemas/components**:
+   - Mapear cada schema a una entidad de dominio
+   - Identificar propiedades y tipos
+   - Determinar relaciones entre entidades
+
+3. **Determinar estructura de carpetas**:
+   - Crear directorios basados en recursos principales
+   - Organizar según la arquitectura limpia
+
+4. **Generar archivos** según estructura del Core
+
+```
+src/core/
+├── domain/entities/[Recurso]/[Recurso]Entity.ts
+├── application/useCases/[Recurso]/[Recurso]UseCase.ts
+├── application/interfaces/[Recurso]/[Recurso]Interface.ts
+├── application/services/[Recurso]/[Recurso]Service.ts
+└── infrastructure/repositories/[Recurso]/[Recurso]Repository.ts
+```
+
+## Transformación desde cURL
+
+### Extracción de información desde cURL
+
+1. Analizar la estructura del comando cURL:
+   - URL del endpoint
+   - Método HTTP
+   - Encabezados
+   - Cuerpo de la petición (si existe)
+
+2. **Identificar el recurso principal**:
+   - Extraer de la URL (ej: `api/agencies` → recurso `Agency`)
+   - Determinar operación según método HTTP
+
+3. **Analizar formato de datos**:
+   - JSON de entrada/salida como base para entidades
+   - Identificar propiedades y tipos
+
+### Ejemplo de transformación
+El ejemplo mostrado a continuación es el mismo en conceptos para cualquier tipo de entrada, es decir open api como json o yaml
+
+Desde cURL:
+```
+curl -X POST https://api.com/v1/agencies \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Agencia Central","address":"Calle Principal 123","phone":"123456789"}'
+```
+
+Hasta estructura de archivos:
+```
+src/core/
+├── domain/
+│   └── entities/Agency/AgencyEntity.ts
+├── application/
+│   ├── interfaces/Agency/IAgencyUseCase.ts
+│   ├── interfaces/Agency/IAgencyRepository.ts
+│   └── useCases/Agency/AgencyUseCase.ts
+└── infrastructure/
+    └── repositories/Agency/AgencyRepositoryImpl.ts
+```
+
+## Reglas de generación por componente
+
+### 1. Entidades (Domain/Entities)
+
+```typescript
+// AgencyEntity.ts
+export interface AgencyProps {
+  id?: string;
+  name: string;
+  address: string;
+  phone: string;
+}
+
+export class AgencyEntity {
+  readonly id?: string;
+  readonly name: string;
+  readonly address: string;
+  readonly phone: string;
+  
+  constructor(props: AgencyProps) {
+    this.id = props.id;
+    this.name = props.name;
+    this.address = props.address;
+    this.phone = props.phone;
+  }
+}
+
+export interface SaveAgencyResponse {
+  success: boolean;
+  message: string;
+  data?: AgencyEntity;
+}
+```
+
+### 2. Interfaces de Repositorio (Application/Interfaces)
+
+```typescript
+// IAgencyRepository.ts
+import { AgencyEntity, SaveAgencyResponse } from "core/domain/entities/Agency/AgencyEntity";
+
+export interface IAgencyRepository {
+  saveAgency(agency: AgencyEntity): Promise<SaveAgencyResponse>;
+  deleteAgency(agencyId: string): Promise<SaveAgencyResponse>;
+  // Otros métodos según los endpoints disponibles
+}               
+```
+
+### 3. Casos de Uso (Domain/UseCases)
+
+```typescript
+// AgencyUseCase.ts
+import { AgencyEntity, SaveAgencyResponse } from "core/domain/entities/Agency/AgencyEntity";
+import { IAgencyRepository } from "core/application/interfaces/Agency/AgencyInterface";
+
+export class PostAgency {
+  private repository: IAgencyRepository;
+  
+  constructor(repository: IAgencyRepository) {
+    this.repository = repository;
+  }
+  
+  async saveAgency(agency: AgencyEntity): Promise<SaveAgencyResponse> {
+    return await this.repository.saveAgency(agency);
+  }
+  
+  async deleteAgency(agencyId: string): Promise<SaveAgencyResponse> {
+    return await this.repository.deleteAgency(agencyId);
+  }
+}
+```
+
+### 4. Servicios (Application/Services)
+
+```typescript
+// AgencyService.ts
+import { IAgencyRepository } from "core/application/interfaces/Agency/AgencyInterface";
+import { AgencyEntity, SaveAgencyResponse } from "core/domain/entities/Agency/AgencyEntity";
+import { PostAgency } from "core/domain/useCases/Agency/AgencyUseCase";
+import { AgencyRepositoryImpl } from "core/infrastructure/repositories/Agency/AgencyRepository";
+
+export class AgencyService {
+  private readonly postAgency: PostAgency;
+  
+  constructor() {
+    const agencyRepository: IAgencyRepository = new AgencyRepositoryImpl();
+    this.postAgency = new PostAgency(agencyRepository);
+  }
+  
+  async saveAgencyService(agency: AgencyEntity): Promise<SaveAgencyResponse> {
+    return await this.postAgency.saveAgency(agency);
+  }
+  
+  async deleteAgencyService(agencyId: string): Promise<SaveAgencyResponse> {
+    return await this.postAgency.deleteAgency(agencyId);
+  }
+}
+```
+
+### 5. Repositorios (Infrastructure/Repositories)
+
+```typescript
+// AgencyRepository.ts
+import { IAgencyRepository } from "core/application/interfaces/Agency/AgencyInterface";
+import { AgencyEntity, SaveAgencyResponse } from "core/domain/entities/Agency/AgencyEntity";
+import axios from "axios";
+import { API_URL } from "core/infrastructure/apisDeclaration/constants";
+
+export class AgencyRepositoryImpl implements IAgencyRepository {
+  async saveAgency(agency: AgencyEntity): Promise<SaveAgencyResponse> {
+    try {
+      const response = await axios.post(`${API_URL}/agencies`, agency);
+      return {
+        success: true,
+        message: "Agencia guardada correctamente",
+        data: response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: "Error al guardar la agencia"
+      };
+    }
+  }
+  
+  async deleteAgency(agencyId: string): Promise<SaveAgencyResponse> {
+    try {
+      await axios.delete(`${API_URL}/agencies/${agencyId}`);
+      return {
+        success: true,
+        message: "Agencia eliminada correctamente"
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: "Error al eliminar la agencia"
+      };
+    }
+  }
+}
+```
+
+## Notas finales
+
+- Esta guía debe adaptarse a las necesidades específicas del proyecto
+- Mantener coherencia con las convenciones existentes en el proyecto

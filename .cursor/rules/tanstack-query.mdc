@@ -1,0 +1,1157 @@
+---
+alwaysApply: true
+---
+# Reglas para TanStack Query en la Capa de Presentación
+
+<rule>
+Este documento establece las reglas y mejores prácticas para utilizar TanStack Query (React Query) en la capa de presentación para el manejo de estado del servidor y llamadas a APIs.
+
+## Principio Fundamental
+
+SIEMPRE utilizar TanStack Query para implementar llamadas al API desde la capa de presentación. Nunca realizar llamadas directas a servicios o repositorios sin pasar por TanStack Query.
+
+## Configuración Inicial
+
+### 1. QueryClient (main.tsx o App.tsx)
+
+El `QueryClient` debe configurarse una sola vez en el punto de entrada de la aplicación:
+
+```typescript
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 3,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      staleTime: 5 * 60 * 1000, // 5 minutos
+      gcTime: 10 * 60 * 1000, // 10 minutos
+      refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: 1,
+      retryDelay: 1000,
+    },
+  },
+})
+
+// Envolver la aplicación con el Provider
+<QueryClientProvider client={queryClient}>
+  <App />
+</QueryClientProvider>
+```
+
+## Tipos de Operaciones
+
+### 1. Queries (Lectura de Datos)
+
+Usar `useQuery` para operaciones de lectura (GET):
+
+```typescript
+import { useQuery } from '@tanstack/react-query';
+import { ProductService } from 'core/application/services/Product/ProductService';
+
+export const useProducts = () => {
+  const productService = useMemo(() => new ProductService(), []);
+  
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      return await productService.getAllProducts();
+    },
+    staleTime: 5 * 60 * 1000, // Opcional: override del default
+  });
+
+  return {
+    products: data?.data || [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  };
+};
+```
+
+**Características de useQuery:**
+- Caché automático
+- Refetch automático en segundo plano
+- Deduplicación de peticiones
+- Estados de loading, error y success
+- Ideal para GET requests
+
+### 2. Mutations (Escritura de Datos)
+
+Usar `useMutation` para operaciones de escritura (POST, PUT, DELETE):
+
+```typescript
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ProductService } from 'core/application/services/Product/ProductService';
+
+export const useCreateProduct = () => {
+  const queryClient = useQueryClient();
+  const productService = useMemo(() => new ProductService(), []);
+  
+  const {
+    mutate: createProduct,
+    mutateAsync: createProductAsync,
+    isPending,
+    isError,
+    error,
+    data,
+    reset,
+  } = useMutation({
+    mutationKey: ['createProduct'],
+    mutationFn: async (productData: ProductInput) => {
+      return await productService.createProduct(productData);
+    },
+    onSuccess: (data) => {
+      // Invalidar queries relacionadas para refrescar datos
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      
+      // Opcional: Mostrar notificación de éxito
+      if (data.success) {
+        console.log('Producto creado exitosamente');
+      }
+    },
+    onError: (error) => {
+      // Manejo de errores global
+      console.error('Error al crear producto:', error);
+    },
+  });
+
+  return {
+    createProduct,
+    createProductAsync,
+    isPending,
+    isError,
+    error,
+    data,
+    reset,
+  };
+};
+```
+
+**Características de useMutation:**
+- No tiene caché
+- Ideal para operaciones de escritura
+- Callbacks: onSuccess, onError, onSettled
+- Invalidación de queries para actualizar datos
+
+## Estructura de Hooks Personalizados
+
+### Ubicación
+
+Los hooks que utilizan TanStack Query deben estar en:
+```
+src/presentation/{modulo-funcional}/hooks/
+```
+
+### Nomenclatura
+
+- Prefijo `use` seguido del nombre descriptivo
+- Para queries: `useProducts`, `useUser`, `useOrders`
+- Para mutations: `useCreateProduct`, `useUpdateUser`, `useDeleteOrder`
+
+### Patrón de Implementación
+
+```typescript
+// src/presentation/products/hooks/useProductManager.ts
+
+import { useState, useCallback, useMemo } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { ProductService } from "core/application/services/Product/ProductService";
+
+export const useProductManager = () => {
+  // 1. Estado local (solo UI)
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  
+  // 2. Instancia del servicio (memoizada)
+  const productService = useMemo(() => new ProductService(), []);
+  
+  // 3. Mutación con TanStack Query
+  const {
+    mutate: saveProduct,
+    mutateAsync: saveProductAsync,
+    isPending,
+    isError,
+    error: mutationError,
+    data,
+    reset,
+  } = useMutation({
+    mutationKey: ['saveProduct'],
+    mutationFn: async (productData: ProductInput) => {
+      return await productService.saveProduct(productData);
+    },
+    onSuccess: (data) => {
+      if (!data.success) {
+        throw new Error(data.error || "Error al guardar producto");
+      }
+    },
+  });
+  
+  // 4. Derivar estados del resultado
+  const savedProduct = data?.success ? data.product : null;
+  const error = isError 
+    ? mutationError instanceof Error 
+      ? mutationError.message 
+      : "Error desconocido"
+    : null;
+  
+  // 5. Handlers con callbacks
+  const handleSave = useCallback((productData: ProductInput) => {
+    saveProduct(productData);
+  }, [saveProduct]);
+  
+  // 6. Return con valores organizados
+  return {
+    // Estado derivado
+    savedProduct,
+    error,
+    isLoading: isPending,
+    isError,
+    isSuccess: !!savedProduct,
+    
+    // Estado local
+    selectedProduct,
+    setSelectedProduct,
+    
+    // Acciones
+    handleSave,
+    saveProductAsync, // Para casos avanzados
+    reset,
+  };
+};
+```
+
+## Reglas Importantes
+
+### 1. Siempre Memoizar Servicios
+
+```typescript
+// ✅ CORRECTO
+const productService = useMemo(() => new ProductService(), []);
+
+// ❌ INCORRECTO - Se crea una instancia en cada render
+const productService = new ProductService();
+```
+
+### 2. Mutation Keys Descriptivas
+
+```typescript
+// ✅ CORRECTO
+mutationKey: ['createProduct']
+mutationKey: ['updateProduct', productId]
+mutationKey: ['deleteProduct']
+
+// ❌ INCORRECTO
+mutationKey: ['mutation']
+mutationKey: ['save']
+```
+
+### 3. Query Keys con Jerarquía
+
+```typescript
+// ✅ CORRECTO
+queryKey: ['products']
+queryKey: ['products', productId]
+queryKey: ['products', { status: 'active' }]
+queryKey: ['products', productId, 'reviews']
+
+// ❌ INCORRECTO
+queryKey: ['getProducts']
+queryKey: ['productData']
+```
+
+### 4. Manejo de Errores
+
+```typescript
+// ✅ CORRECTO - Extraer lógica de error
+const getErrorMessage = (): string | null => {
+  if (isError) {
+    return mutationError instanceof Error
+      ? mutationError.message
+      : "Error desconocido";
+  }
+  
+  if (data && !data.success) {
+    return data.error || "Error en la operación";
+  }
+  
+  return null;
+};
+
+const error = getErrorMessage();
+
+// ❌ INCORRECTO - Ternarios anidados
+const error = isError ? mutationError instanceof Error ? mutationError.message : "Error" : null;
+```
+
+### 5. Invalidación de Queries
+
+Después de mutations exitosas, invalidar queries relacionadas:
+
+```typescript
+onSuccess: () => {
+  // Invalidar query específica
+  queryClient.invalidateQueries({ queryKey: ['products'] });
+  
+  // Invalidar múltiples queries relacionadas
+  queryClient.invalidateQueries({ queryKey: ['products'] });
+  queryClient.invalidateQueries({ queryKey: ['categories'] });
+  
+  // Invalidar con filtro
+  queryClient.invalidateQueries({ 
+    queryKey: ['products'],
+    exact: false // Invalida todas las queries que empiecen con 'products'
+  });
+}
+```
+
+## Casos de Uso Comunes
+
+### Caso 1: Conversión de YAML (Mutación Simple)
+
+```typescript
+// src/presentation/yaml-converter/hooks/useYamlConverter.ts
+import { useMutation } from "@tanstack/react-query";
+import { YamlConverterService } from "core/application/services/YamlConverter/YamlConverterService";
+
+export const useYamlConverter = () => {
+  const yamlConverterService = useMemo(() => new YamlConverterService(), []);
+
+  const {
+    mutate: convertYaml,
+    data,
+    isPending,
+    isError,
+    error,
+    reset,
+  } = useMutation({
+    mutationKey: ["convertYaml"],
+    mutationFn: async (yamlContent: string) => {
+      return await yamlConverterService.convertYaml(yamlContent);
+    },
+    onSuccess: (data) => {
+      if (!data.success) {
+        throw new Error(data.error || "Error en conversión");
+      }
+    },
+  });
+
+  return {
+    convertYaml,
+    result: data?.yamlOutput,
+    isLoading: isPending,
+    isError,
+    error,
+    reset,
+  };
+};
+```
+
+### Caso 2: CRUD Completo
+
+```typescript
+// src/presentation/products/hooks/useProductCRUD.ts
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ProductService } from "core/application/services/Product/ProductService";
+
+export const useProductCRUD = () => {
+  const queryClient = useQueryClient();
+  const productService = useMemo(() => new ProductService(), []);
+
+  // Query para listar productos
+  const {
+    data: products,
+    isLoading: isLoadingList,
+  } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const response = await productService.getAllProducts();
+      return response.data || [];
+    },
+  });
+
+  // Mutation para crear
+  const createMutation = useMutation({
+    mutationKey: ['createProduct'],
+    mutationFn: async (data: ProductInput) => {
+      return await productService.createProduct(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+
+  // Mutation para actualizar
+  const updateMutation = useMutation({
+    mutationKey: ['updateProduct'],
+    mutationFn: async ({ id, data }: { id: string; data: ProductInput }) => {
+      return await productService.updateProduct(id, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+
+  // Mutation para eliminar
+  const deleteMutation = useMutation({
+    mutationKey: ['deleteProduct'],
+    mutationFn: async (id: string) => {
+      return await productService.deleteProduct(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+
+  return {
+    // Datos
+    products,
+    isLoadingList,
+    
+    // Create
+    createProduct: createMutation.mutate,
+    isCreating: createMutation.isPending,
+    
+    // Update
+    updateProduct: updateMutation.mutate,
+    isUpdating: updateMutation.isPending,
+    
+    // Delete
+    deleteProduct: deleteMutation.mutate,
+    isDeleting: deleteMutation.isPending,
+  };
+};
+```
+
+### Caso 3: Query con Parámetros
+
+```typescript
+// src/presentation/products/hooks/useProduct.ts
+import { useQuery } from "@tanstack/react-query";
+import { ProductService } from "core/application/services/Product/ProductService";
+
+export const useProduct = (productId: string | null) => {
+  const productService = useMemo(() => new ProductService(), []);
+
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ['products', productId],
+    queryFn: async () => {
+      if (!productId) return null;
+      return await productService.getProduct(productId);
+    },
+    enabled: !!productId, // Solo ejecutar si hay productId
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return {
+    product: data?.product,
+    isLoading,
+    isError,
+    error,
+  };
+};
+```
+
+## Integración con Arquitectura Limpia
+
+### Flujo de Datos
+
+```
+Usuario interactúa con Componente
+    ↓
+Hook personalizado (useYamlConverter)
+    ↓
+TanStack Query (useMutation/useQuery)
+    ↓
+Service (YamlConverterService)
+    ↓
+Use Case (ConvertYamlUseCase)
+    ↓
+Repository (YamlConverterRepository)
+    ↓
+Axios Instance
+    ↓
+API Externa
+```
+
+### Separación de Responsabilidades
+
+1. **Componentes**: Solo UI y eventos
+2. **Hooks personalizados**: Estado local + TanStack Query
+3. **TanStack Query**: Cache, refetch, loading states
+4. **Services**: Coordinación de use cases
+5. **Use Cases**: Lógica de negocio
+6. **Repositories**: Llamadas HTTP con Axios
+
+## DevTools (Opcional)
+
+Para desarrollo, agregar React Query DevTools:
+
+```typescript
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+<QueryClientProvider client={queryClient}>
+  <App />
+  <ReactQueryDevtools initialIsOpen={false} />
+</QueryClientProvider>
+```
+
+## Anti-Patrones (NO HACER)
+
+### ❌ Llamadas Directas sin TanStack Query
+
+```typescript
+// ❌ INCORRECTO
+const handleSubmit = async () => {
+  const service = new ProductService();
+  const result = await service.createProduct(data);
+  // Manejo manual de loading, error, etc.
+}
+```
+
+### ❌ Estado Local para Datos del Servidor
+
+```typescript
+// ❌ INCORRECTO
+const [products, setProducts] = useState([]);
+const [loading, setLoading] = useState(false);
+
+useEffect(() => {
+  setLoading(true);
+  productService.getAll().then(data => {
+    setProducts(data);
+    setLoading(false);
+  });
+}, []);
+```
+
+### ❌ Servicios sin Memoizar
+
+```typescript
+// ❌ INCORRECTO - Nueva instancia en cada render
+const productService = new ProductService();
+```
+
+### ❌ No Invalidar Queries
+
+```typescript
+// ❌ INCORRECTO - Los datos no se actualizan
+onSuccess: () => {
+  console.log('Producto creado');
+  // Falta invalidar las queries
+}
+```
+
+## Beneficios
+
+1. **Caché automático**: Reduce llamadas innecesarias a la API
+2. **Estados manejados**: Loading, error y success out of the box
+3. **Refetch inteligente**: Actualización en segundo plano
+4. **Optimistic updates**: Actualizar UI antes de la respuesta
+5. **Deduplicación**: Múltiples componentes pueden usar la misma query
+6. **Retry automático**: Reintentos configurables
+7. **Garbage collection**: Limpieza automática de datos no usados
+
+## Resumen
+
+- ✅ SIEMPRE usar TanStack Query para llamadas al API
+- ✅ Usar `useQuery` para lectura (GET)
+- ✅ Usar `useMutation` para escritura (POST, PUT, DELETE)
+- ✅ Memoizar instancias de servicios
+- ✅ Invalidar queries después de mutations exitosas
+- ✅ Extraer lógica de error de forma clara
+- ✅ Usar mutation/query keys descriptivas
+- ❌ NUNCA hacer llamadas directas sin TanStack Query
+- ❌ NUNCA usar useState para datos del servidor
+- ❌ NUNCA olvidar invalidar queries relacionadas
+</rule>
+# Reglas para TanStack Query en la Capa de Presentación
+
+<rule>
+Este documento establece las reglas y mejores prácticas para utilizar TanStack Query (React Query) en la capa de presentación para el manejo de estado del servidor y llamadas a APIs.
+
+## Principio Fundamental
+
+SIEMPRE utilizar TanStack Query para implementar llamadas al API desde la capa de presentación. Nunca realizar llamadas directas a servicios o repositorios sin pasar por TanStack Query.
+
+## Configuración Inicial
+
+### 1. QueryClient (main.tsx o App.tsx)
+
+El `QueryClient` debe configurarse una sola vez en el punto de entrada de la aplicación:
+
+```typescript
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 3,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+      staleTime: 5 * 60 * 1000, // 5 minutos
+      gcTime: 10 * 60 * 1000, // 10 minutos
+      refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: 1,
+      retryDelay: 1000,
+    },
+  },
+})
+
+// Envolver la aplicación con el Provider
+<QueryClientProvider client={queryClient}>
+  <App />
+</QueryClientProvider>
+```
+
+## Tipos de Operaciones
+
+### 1. Queries (Lectura de Datos)
+
+Usar `useQuery` para operaciones de lectura (GET):
+
+```typescript
+import { useQuery } from '@tanstack/react-query';
+import { ProductService } from 'core/application/services/Product/ProductService';
+
+export const useProducts = () => {
+  const productService = useMemo(() => new ProductService(), []);
+  
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      return await productService.getAllProducts();
+    },
+    staleTime: 5 * 60 * 1000, // Opcional: override del default
+  });
+
+  return {
+    products: data?.data || [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  };
+};
+```
+
+**Características de useQuery:**
+- Caché automático
+- Refetch automático en segundo plano
+- Deduplicación de peticiones
+- Estados de loading, error y success
+- Ideal para GET requests
+
+### 2. Mutations (Escritura de Datos)
+
+Usar `useMutation` para operaciones de escritura (POST, PUT, DELETE):
+
+```typescript
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ProductService } from 'core/application/services/Product/ProductService';
+
+export const useCreateProduct = () => {
+  const queryClient = useQueryClient();
+  const productService = useMemo(() => new ProductService(), []);
+  
+  const {
+    mutate: createProduct,
+    mutateAsync: createProductAsync,
+    isPending,
+    isError,
+    error,
+    data,
+    reset,
+  } = useMutation({
+    mutationKey: ['createProduct'],
+    mutationFn: async (productData: ProductInput) => {
+      return await productService.createProduct(productData);
+    },
+    onSuccess: (data) => {
+      // Invalidar queries relacionadas para refrescar datos
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      
+      // Opcional: Mostrar notificación de éxito
+      if (data.success) {
+        console.log('Producto creado exitosamente');
+      }
+    },
+    onError: (error) => {
+      // Manejo de errores global
+      console.error('Error al crear producto:', error);
+    },
+  });
+
+  return {
+    createProduct,
+    createProductAsync,
+    isPending,
+    isError,
+    error,
+    data,
+    reset,
+  };
+};
+```
+
+**Características de useMutation:**
+- No tiene caché
+- Ideal para operaciones de escritura
+- Callbacks: onSuccess, onError, onSettled
+- Invalidación de queries para actualizar datos
+
+## Estructura de Hooks Personalizados
+
+### Ubicación
+
+Los hooks que utilizan TanStack Query deben estar en:
+```
+src/presentation/{modulo-funcional}/hooks/
+```
+
+### Nomenclatura
+
+- Prefijo `use` seguido del nombre descriptivo
+- Para queries: `useProducts`, `useUser`, `useOrders`
+- Para mutations: `useCreateProduct`, `useUpdateUser`, `useDeleteOrder`
+
+### Patrón de Implementación
+
+```typescript
+// src/presentation/products/hooks/useProductManager.ts
+
+import { useState, useCallback, useMemo } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { ProductService } from "core/application/services/Product/ProductService";
+
+export const useProductManager = () => {
+  // 1. Estado local (solo UI)
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  
+  // 2. Instancia del servicio (memoizada)
+  const productService = useMemo(() => new ProductService(), []);
+  
+  // 3. Mutación con TanStack Query
+  const {
+    mutate: saveProduct,
+    mutateAsync: saveProductAsync,
+    isPending,
+    isError,
+    error: mutationError,
+    data,
+    reset,
+  } = useMutation({
+    mutationKey: ['saveProduct'],
+    mutationFn: async (productData: ProductInput) => {
+      return await productService.saveProduct(productData);
+    },
+    onSuccess: (data) => {
+      if (!data.success) {
+        throw new Error(data.error || "Error al guardar producto");
+      }
+    },
+  });
+  
+  // 4. Derivar estados del resultado
+  const savedProduct = data?.success ? data.product : null;
+  const error = isError 
+    ? mutationError instanceof Error 
+      ? mutationError.message 
+      : "Error desconocido"
+    : null;
+  
+  // 5. Handlers con callbacks
+  const handleSave = useCallback((productData: ProductInput) => {
+    saveProduct(productData);
+  }, [saveProduct]);
+  
+  // 6. Return con valores organizados
+  return {
+    // Estado derivado
+    savedProduct,
+    error,
+    isLoading: isPending,
+    isError,
+    isSuccess: !!savedProduct,
+    
+    // Estado local
+    selectedProduct,
+    setSelectedProduct,
+    
+    // Acciones
+    handleSave,
+    saveProductAsync, // Para casos avanzados
+    reset,
+  };
+};
+```
+
+## Reglas Importantes
+
+### 1. Siempre Memoizar Servicios
+
+```typescript
+// ✅ CORRECTO
+const productService = useMemo(() => new ProductService(), []);
+
+// ❌ INCORRECTO - Se crea una instancia en cada render
+const productService = new ProductService();
+```
+
+### 2. Mutation Keys Descriptivas
+
+```typescript
+// ✅ CORRECTO
+mutationKey: ['createProduct']
+mutationKey: ['updateProduct', productId]
+mutationKey: ['deleteProduct']
+
+// ❌ INCORRECTO
+mutationKey: ['mutation']
+mutationKey: ['save']
+```
+
+### 3. Query Keys con Jerarquía
+
+```typescript
+// ✅ CORRECTO
+queryKey: ['products']
+queryKey: ['products', productId]
+queryKey: ['products', { status: 'active' }]
+queryKey: ['products', productId, 'reviews']
+
+// ❌ INCORRECTO
+queryKey: ['getProducts']
+queryKey: ['productData']
+```
+
+### 4. Manejo de Errores
+
+```typescript
+// ✅ CORRECTO - Extraer lógica de error
+const getErrorMessage = (): string | null => {
+  if (isError) {
+    return mutationError instanceof Error
+      ? mutationError.message
+      : "Error desconocido";
+  }
+  
+  if (data && !data.success) {
+    return data.error || "Error en la operación";
+  }
+  
+  return null;
+};
+
+const error = getErrorMessage();
+
+// ❌ INCORRECTO - Ternarios anidados
+const error = isError ? mutationError instanceof Error ? mutationError.message : "Error" : null;
+```
+
+### 5. Invalidación de Queries
+
+Después de mutations exitosas, invalidar queries relacionadas:
+
+```typescript
+onSuccess: () => {
+  // Invalidar query específica
+  queryClient.invalidateQueries({ queryKey: ['products'] });
+  
+  // Invalidar múltiples queries relacionadas
+  queryClient.invalidateQueries({ queryKey: ['products'] });
+  queryClient.invalidateQueries({ queryKey: ['categories'] });
+  
+  // Invalidar con filtro
+  queryClient.invalidateQueries({ 
+    queryKey: ['products'],
+    exact: false // Invalida todas las queries que empiecen con 'products'
+  });
+}
+```
+
+## Casos de Uso Comunes
+
+### Caso 1: Conversión de YAML (Mutación Simple)
+
+```typescript
+// src/presentation/yaml-converter/hooks/useYamlConverter.ts
+import { useMutation } from "@tanstack/react-query";
+import { YamlConverterService } from "core/application/services/YamlConverter/YamlConverterService";
+
+export const useYamlConverter = () => {
+  const yamlConverterService = useMemo(() => new YamlConverterService(), []);
+
+  const {
+    mutate: convertYaml,
+    data,
+    isPending,
+    isError,
+    error,
+    reset,
+  } = useMutation({
+    mutationKey: ["convertYaml"],
+    mutationFn: async (yamlContent: string) => {
+      return await yamlConverterService.convertYaml(yamlContent);
+    },
+    onSuccess: (data) => {
+      if (!data.success) {
+        throw new Error(data.error || "Error en conversión");
+      }
+    },
+  });
+
+  return {
+    convertYaml,
+    result: data?.yamlOutput,
+    isLoading: isPending,
+    isError,
+    error,
+    reset,
+  };
+};
+```
+
+### Caso 2: CRUD Completo
+
+```typescript
+// src/presentation/products/hooks/useProductCRUD.ts
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ProductService } from "core/application/services/Product/ProductService";
+
+export const useProductCRUD = () => {
+  const queryClient = useQueryClient();
+  const productService = useMemo(() => new ProductService(), []);
+
+  // Query para listar productos
+  const {
+    data: products,
+    isLoading: isLoadingList,
+  } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const response = await productService.getAllProducts();
+      return response.data || [];
+    },
+  });
+
+  // Mutation para crear
+  const createMutation = useMutation({
+    mutationKey: ['createProduct'],
+    mutationFn: async (data: ProductInput) => {
+      return await productService.createProduct(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+
+  // Mutation para actualizar
+  const updateMutation = useMutation({
+    mutationKey: ['updateProduct'],
+    mutationFn: async ({ id, data }: { id: string; data: ProductInput }) => {
+      return await productService.updateProduct(id, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+
+  // Mutation para eliminar
+  const deleteMutation = useMutation({
+    mutationKey: ['deleteProduct'],
+    mutationFn: async (id: string) => {
+      return await productService.deleteProduct(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+  });
+
+  return {
+    // Datos
+    products,
+    isLoadingList,
+    
+    // Create
+    createProduct: createMutation.mutate,
+    isCreating: createMutation.isPending,
+    
+    // Update
+    updateProduct: updateMutation.mutate,
+    isUpdating: updateMutation.isPending,
+    
+    // Delete
+    deleteProduct: deleteMutation.mutate,
+    isDeleting: deleteMutation.isPending,
+  };
+};
+```
+
+### Caso 3: Query con Parámetros
+
+```typescript
+// src/presentation/products/hooks/useProduct.ts
+import { useQuery } from "@tanstack/react-query";
+import { ProductService } from "core/application/services/Product/ProductService";
+
+export const useProduct = (productId: string | null) => {
+  const productService = useMemo(() => new ProductService(), []);
+
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ['products', productId],
+    queryFn: async () => {
+      if (!productId) return null;
+      return await productService.getProduct(productId);
+    },
+    enabled: !!productId, // Solo ejecutar si hay productId
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return {
+    product: data?.product,
+    isLoading,
+    isError,
+    error,
+  };
+};
+```
+
+## Integración con Arquitectura Limpia
+
+### Flujo de Datos
+
+```
+Usuario interactúa con Componente
+    ↓
+Hook personalizado (useYamlConverter)
+    ↓
+TanStack Query (useMutation/useQuery)
+    ↓
+Service (YamlConverterService)
+    ↓
+Use Case (ConvertYamlUseCase)
+    ↓
+Repository (YamlConverterRepository)
+    ↓
+Axios Instance
+    ↓
+API Externa
+```
+
+### Separación de Responsabilidades
+
+1. **Componentes**: Solo UI y eventos
+2. **Hooks personalizados**: Estado local + TanStack Query
+3. **TanStack Query**: Cache, refetch, loading states
+4. **Services**: Coordinación de use cases
+5. **Use Cases**: Lógica de negocio
+6. **Repositories**: Llamadas HTTP con Axios
+
+## DevTools (Opcional)
+
+Para desarrollo, agregar React Query DevTools:
+
+```typescript
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+<QueryClientProvider client={queryClient}>
+  <App />
+  <ReactQueryDevtools initialIsOpen={false} />
+</QueryClientProvider>
+```
+
+## Anti-Patrones (NO HACER)
+
+### ❌ Llamadas Directas sin TanStack Query
+
+```typescript
+// ❌ INCORRECTO
+const handleSubmit = async () => {
+  const service = new ProductService();
+  const result = await service.createProduct(data);
+  // Manejo manual de loading, error, etc.
+}
+```
+
+### ❌ Estado Local para Datos del Servidor
+
+```typescript
+// ❌ INCORRECTO
+const [products, setProducts] = useState([]);
+const [loading, setLoading] = useState(false);
+
+useEffect(() => {
+  setLoading(true);
+  productService.getAll().then(data => {
+    setProducts(data);
+    setLoading(false);
+  });
+}, []);
+```
+
+### ❌ Servicios sin Memoizar
+
+```typescript
+// ❌ INCORRECTO - Nueva instancia en cada render
+const productService = new ProductService();
+```
+
+### ❌ No Invalidar Queries
+
+```typescript
+// ❌ INCORRECTO - Los datos no se actualizan
+onSuccess: () => {
+  console.log('Producto creado');
+  // Falta invalidar las queries
+}
+```
+
+## Beneficios
+
+1. **Caché automático**: Reduce llamadas innecesarias a la API
+2. **Estados manejados**: Loading, error y success out of the box
+3. **Refetch inteligente**: Actualización en segundo plano
+4. **Optimistic updates**: Actualizar UI antes de la respuesta
+5. **Deduplicación**: Múltiples componentes pueden usar la misma query
+6. **Retry automático**: Reintentos configurables
+7. **Garbage collection**: Limpieza automática de datos no usados
+
+## Resumen
+
+- ✅ SIEMPRE usar TanStack Query para llamadas al API
+- ✅ Usar `useQuery` para lectura (GET)
+- ✅ Usar `useMutation` para escritura (POST, PUT, DELETE)
+- ✅ Memoizar instancias de servicios
+- ✅ Invalidar queries después de mutations exitosas
+- ✅ Extraer lógica de error de forma clara
+- ✅ Usar mutation/query keys descriptivas
+- ❌ NUNCA hacer llamadas directas sin TanStack Query
+- ❌ NUNCA usar useState para datos del servidor
+- ❌ NUNCA olvidar invalidar queries relacionadas
+</rule>

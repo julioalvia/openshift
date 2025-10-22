@@ -1,0 +1,161 @@
+---
+description: Este archivo establece reglas fundamentales para mantener un código limpio, organizado y mantenible, incluyendo límites de tamaño, gestión de complejidad y prácticas de calidad.
+alwaysApply: true
+---
+# Reglas de Código Limpio
+
+<rule>
+Este documento define las reglas fundamentales para mantener un código limpio, modular y fácil de mantener, estableciendo estándares para el tamaño de componentes, gestión de complejidad y calidad del código.
+
+## Tamaño y Estructura de Componentes
+
+1. **Límite de Tamaño**
+   - NUNCA exceder las 300 líneas de código en un solo componente
+   - Si un componente se acerca a este límite, es señal de que debe ser dividido
+
+2. **Separación de Lógica y UI**
+   - SIEMPRE extraer la lógica de los componentes a hooks personalizados
+   - Los componentes deben centrarse en la presentación (UI), no en la lógica de negocio
+   - Ejemplo:
+
+
+3. **Componentes Pequeños y Enfocados**
+   - Crear componentes con una única responsabilidad
+   - Promover la composición de componentes pequeños
+   - Si un componente tiene múltiples secciones, dividirlo en subcomponentes
+
+## Control de Complejidad
+
+1. **Complejidad Ciclomática**
+   - NUNCA exceder una complejidad ciclomática de 10 por función/método
+   - Limitar la cantidad de estructuras condicionales y bucles anidados
+   - Extraer lógica compleja a funciones auxiliares con nombres descriptivos
+
+2. **Complejidad Cognitiva**
+   - Mantener la complejidad cognitiva por debajo de 15 puntos
+   - Evitar anidamientos profundos (máximo 3 niveles)
+   - Preferir funciones puras y predecibles
+
+3. **Ejemplos de Reducción de Complejidad**
+
+```typescript
+// ❌ INCORRECTO: Alta complejidad ciclomática y cognitiva
+function processUserData(users, filters, options) {
+  const result = [];
+  for (let i = 0; i < users.length; i++) {
+    if (filters.age) {
+      if (users[i].age < filters.age.min || users[i].age > filters.age.max) {
+        continue;
+      }
+    }
+    
+    if (filters.status && users[i].status !== filters.status) {
+      continue;
+    }
+    
+    let userData = { ...users[i] };
+    
+    if (options.includeActivity) {
+      if (users[i].lastActive) {
+        const daysSinceActive = calculateDaysSince(users[i].lastActive);
+        if (daysSinceActive > 30) {
+          userData.activityStatus = 'inactive';
+        } else if (daysSinceActive > 7) {
+          userData.activityStatus = 'stale';
+        } else {
+          userData.activityStatus = 'active';
+        }
+      } else {
+        userData.activityStatus = 'unknown';
+      }
+    }
+    
+    result.push(userData);
+  }
+  
+  return result;
+}
+
+// ✅ CORRECTO: Complejidad reducida mediante extracción de funciones
+function processUserData(users, filters, options) {
+  return users
+    .filter(user => meetsAgeFilter(user, filters.age))
+    .filter(user => meetsStatusFilter(user, filters.status))
+    .map(user => enrichUserData(user, options));
+}
+
+function meetsAgeFilter(user, ageFilter) {
+  if (!ageFilter) return true;
+  return user.age >= ageFilter.min && user.age <= ageFilter.max;
+}
+
+function meetsStatusFilter(user, statusFilter) {
+  if (!statusFilter) return true;
+  return user.status === statusFilter;
+}
+
+function enrichUserData(user, options) {
+  const userData = { ...user };
+  
+  if (options.includeActivity) {
+    userData.activityStatus = calculateActivityStatus(user.lastActive);
+  }
+  
+  return userData;
+}
+
+function calculateActivityStatus(lastActiveDate) {
+  if (!lastActiveDate) return 'unknown';
+  
+  const daysSinceActive = calculateDaysSince(lastActiveDate);
+  
+  if (daysSinceActive > 30) return 'inactive';
+  if (daysSinceActive > 7) return 'stale';
+  return 'active';
+}
+```
+
+## Calidad del Código y Validación
+
+1. **Validación de Lint**
+   - SIEMPRE ejecutar y corregir errores de lint antes de finalizar cualquier cambio
+   - No ignorar advertencias de lint sin una razón documentada
+
+2. **Integración con SonarQube**
+   - SIEMPRE validar que el código cumpla con las reglas de SonarQube
+   - Revisar y corregir:
+     - "Code smells"
+     - Vulnerabilidades de seguridad
+     - Código duplicado
+     - Cobertura de pruebas insuficiente
+
+3. **Pautas Generales**
+   - Mantener nombres de variables y funciones descriptivos
+   - Limitar el número de parámetros en las funciones (máximo 3)
+   - Evitar efectos secundarios no documentados
+   - Preferir inmutabilidad sobre mutación de estado
+
+## Refactorización
+
+1. **Cuándo Refactorizar**
+   - Al detectar componentes que se acercan al límite de 300 líneas
+   - Cuando la complejidad ciclomática supera 10
+   - Cuando la complejidad cognitiva supera 15
+   - Al identificar código duplicado o patrones repetitivos
+
+2. **Estrategias de Refactorización**
+   - Extraer lógica a hooks personalizados
+   - Descomponer componentes grandes en componentes más pequeños
+   - Convertir funciones complejas en múltiples funciones simples
+   - Utilizar composición para reutilizar código
+
+
+## Patrones Anti-Patrón (NO HACER)
+
+- ❌ **Componentes monolíticos**: No crear componentes con múltiples responsabilidades
+- ❌ **Lógica en componentes**: No incluir lógica compleja directamente en componentes
+- ❌ **Funciones extensas**: No escribir funciones de más de 30 líneas
+- ❌ **Ignorar lint**: No deshabilitar reglas de lint sin justificación documentada
+- ❌ **Complejidad excesiva**: No permitir alta complejidad ciclomática o cognitiva
+- ❌ **Código duplicado**: No repetir lógica similar en múltiples lugares
+</rule>

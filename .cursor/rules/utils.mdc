@@ -1,0 +1,167 @@
+---
+description: Este archivo define las reglas para el uso y organización de las utilidades disponibles en `/src/utils` para garantizar la reutilización efectiva y evitar la duplicación de funcionalidad.
+alwaysApply: false
+---
+# Utilidades del Sistema (Utils)
+
+<rule>
+Este documento establece las reglas para el uso y organización de las utilidades del sistema ubicadas en la carpeta `/src/utils`. El objetivo es maximizar la reutilización de código, mantener la consistencia y evitar la duplicación de funcionalidades comunes.
+
+## Regla Principal
+SIEMPRE verificar si ya existe una utilidad en `/src/utils` antes de implementar una nueva función utilitaria. Muchas funciones comunes ya están implementadas y listas para usar.
+
+## Estructura de Carpetas
+Las utilidades están organizadas por categoría funcional, cada una en su propia subcarpeta:
+
+```
+src/utils/
+├── constants/          # Constantes globales y valores de configuración
+├── encrypt/            # Funciones relacionadas con encriptación y seguridad
+├── filterState/        # Utilidades para filtrar estados
+├── formatDate/         # Funciones para formateo de fechas y horas
+├── formatMoney/        # Funciones para formateo de valores monetarios
+├── generateGradient/   # Utilidades para generar gradientes de color
+├── getVisibleCols/     # Utilidades para gestionar columnas visibles
+├── mappers/            # Funciones para mapear datos entre diferentes estructuras
+├── transformJSON/      # Utilidades para transformación de objetos JSON
+├── types/              # Tipos comunes utilizados en utilidades
+├── uploadMedia/        # Funciones para subir y gestionar archivos multimedia
+└── Validators/         # Funciones para validación de datos
+```
+
+## Categorías de Utilidades
+
+### Mappers (`/src/utils/mappers/`)
+Funciones para transformar datos de un formato a otro, especialmente útiles para adaptar datos entre API y componentes de UI.
+
+Ejemplo de uso:
+```typescript
+import { mapToOptions } from "utils/mappers/mapToOptions";
+
+// Convertir un array de objetos a formato de opciones para componentes Select
+const options = mapToOptions({
+  data: customers,
+  valueKey: "id",
+  labelKey: "name"
+});
+```
+
+### Format Functions (`/src/utils/formatDate/`, `/src/utils/formatMoney/`)
+Utilidades para dar formato consistente a fechas, moneda y otros tipos de datos.
+
+Ejemplo de uso:
+```typescript
+import { formatDate } from "utils/formatDate/formatDate";
+import { formatMoney } from "utils/formatMoney/formatMoney";
+
+// Formatear fecha
+const formattedDate = formatDate(new Date());
+
+// Formatear moneda
+const formattedAmount = formatMoney(1000.50); // "$1,000.50"
+```
+
+### Upload Media (`/src/utils/uploadMedia/`)
+Funciones para gestionar la carga de archivos multimedia (imágenes, videos, documentos).
+
+Ejemplo de uso:
+```typescript
+import { uploadImageWithRetry, uploadMultipleFiles } from "utils/uploadMedia/uploadUtils";
+
+// Subir una imagen con reintentos automáticos
+const imageUrl = await uploadImageWithRetry(
+  imageFile,
+  import.meta.env.VITE_ENCRYPT_URL_BLOB,
+  import.meta.env.VITE_BLOB_CONTAINER
+);
+
+// Subir múltiples archivos
+const uploadResults = await uploadMultipleFiles(
+  files,
+  import.meta.env.VITE_ENCRYPT_URL_BLOB,
+  import.meta.env.VITE_BLOB_CONTAINER
+);
+```
+
+### Validators (`/src/utils/Validators/`)
+Funciones para validar datos de entrada, como emails, contraseñas, formatos específicos, etc.
+
+Ejemplo de uso:
+```typescript
+import { isValidEmail, isStrongPassword } from "utils/Validators/validators";
+
+// Validar email
+const emailIsValid = isValidEmail(email);
+
+// Validar fortaleza de contraseña
+const passwordIsStrong = isStrongPassword(password);
+```
+
+## Reglas para el Uso de Utilidades
+
+1. **Importaciones**:
+   - Usar rutas absolutas para importar utilidades:
+   ```typescript
+   // CORRECTO
+   import { formatDate } from "utils/formatDate/formatDate";
+   
+   // INCORRECTO
+   import { formatDate } from "../../../utils/formatDate/formatDate";
+   ```
+
+2. **Reutilización**:
+   - SIEMPRE verificar si existe una utilidad antes de crear una nueva
+   - Si una función podría ser útil en diferentes partes de la aplicación, implementarla como una utilidad
+
+3. **Nombramiento**:
+   - Usar nombres descriptivos que indiquen claramente el propósito
+   - Para formateo: prefijo `format` (ejemplo: `formatDate`)
+   - Para conversiones: prefijo `mapTo` o `convertTo` (ejemplo: `mapToOptions`)
+   - Para validaciones: prefijo `isValid` o `validate` (ejemplo: `isValidEmail`)
+
+4. **Organización**:
+   - Cada utilidad debe estar en su propia carpeta según su categoría funcional
+   - Mantener un archivo de barril (index.ts) para exportar todas las funciones de una categoría
+
+5. **Patrón de Diseño**:
+   - Las utilidades deben ser funciones puras cuando sea posible
+   - Evitar efectos secundarios y dependencias de estado global
+   - Documentar claramente los parámetros y valores de retorno
+
+## Implementación de Nuevas Utilidades
+
+Si necesitas crear una nueva utilidad:
+
+1. Verificar que no exista ya una función similar
+2. Determinar la categoría adecuada (mappers, formatters, validators, etc.)
+3. Crear un archivo en la subcarpeta correspondiente
+4. Implementar la función como una función pura y exportarla
+5. Documentar claramente su propósito, parámetros y comportamiento esperado
+
+Ejemplo:
+
+```typescript
+// utils/stringUtils/capitalize.ts
+
+/**
+ * Convierte la primera letra de cada palabra en un string a mayúscula
+ * @param text - El texto a capitalizar
+ * @returns El texto con la primera letra de cada palabra en mayúscula
+ */
+export function capitalize(text: string): string {
+  if (!text) return '';
+  return text
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+```
+
+## Anti-patrones (NO HACER)
+
+- ❌ **No duplicar utilidades existentes**: Verificar siempre si ya existe una función para lo que necesitas
+- ❌ **No mezclar lógica de negocio con utilidades**: Las utilidades deben ser genéricas y reutilizables
+- ❌ **No incluir dependencias de estado**: Las utilidades deben ser funciones puras sin efectos secundarios
+- ❌ **No crear utilidades específicas de un módulo**: Si es específica, debe estar en ese módulo, no en `/utils`
+- ❌ **No escribir utilidades sin tipado**: Siempre definir correctamente los tipos para parámetros y retornos
+</rule>
